@@ -1,0 +1,33 @@
+apiVersion: v2
+appVersion: 3.1.1
+name: thingsboard
+version: 0.1.0
+description: ThingBoard K8s Helm Chart.
+home: https://thingsboard.io/
+source:
+  - https://github.com/thingsboard/thingsboard
+keywords:
+  - iot
+  - iot-analytics
+  - mqtt
+maintainers:
+  - name: ThingsBoard Community
+details:
+  This Helm chart is a fully installable app that codifies a ThingsBoard cluster.
+dependencies:
+  - name: postgresql-ha
+    version: 6.3.2
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql-ha.enabled
+  - name: kafka
+    version: 12.4.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: kafka.enabled
+  - name: cassandra
+    version: 7.1.2
+    repository: https://charts.bitnami.com/bitnami
+    condition: cassandra.enabled
+  - name: redis
+    version: 12.2.3
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

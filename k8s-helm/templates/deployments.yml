@@ -1,0 +1,393 @@
+#
+# Copyright © 2016-2020 The Thingsboard Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-tb-js-executor
+  labels:
+    app: {{ .Release.Name }}-tb-js-executor
+    tier: backend
+    support: {{ template "supportLevel" . }}
+    vendor: ThingsBoard
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.executor.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-tb-js-executor
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-tb-js-executor
+    spec:
+      containers:
+      - name: server
+        imagePullPolicy: {{ .Values.executor.image.pullPolicy | default .Values.global.image.pullPolicy }}
+        image: "{{ template "imageRepository" . }}/tb-js-executor{{ template "licensedSuffix" . }}:{{ .Chart.AppVersion }}"
+        env:
+        - name: REMOTE_JS_EVAL_REQUEST_TOPIC
+          value: {{ .Values.executor.kafkaTopic | quote }}
+        {{- if .Values.kafka.enabled }}
+        - name: TB_KAFKA_SERVERS
+          value: "{{ template "kafka-nodes" $ }}"
+        {{- end }}
+        - name: LOGGER_LEVEL
+          value: {{ .Values.executor.loggerLevel | quote }}
+        - name: LOG_FOLDER
+          value: "logs"
+        - name: LOGGER_FILENAME
+          value: "tb-js-executor-%DATE%.log"
+        - name: DOCKER_MODE
+          value: "true"
+        - name: SCRIPT_BODY_TRACE_FREQUENCY
+          value: {{ .Values.executor.scriptBodyTraceFrequency | quote }}
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-tb-mqtt-transport
+  labels:
+    app: {{ .Release.Name }}-tb-mqtt-transport
+    tier: backend
+    support: {{ template "supportLevel" . }}
+    vendor: ThingsBoard
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.mqttWorker.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-tb-mqtt-transport
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-tb-mqtt-transport
+    spec:
+      volumes:
+        - name: {{ .Release.Name }}-tb-mqtt-transport-config
+          configMap:
+            name: {{ .Release.Name }}-tb-mqtt-transport-config
+            items:
+            - key: conf
+              path: tb-mqtt-transport.conf
+            - key: logback
+              path: logback.xml
+      containers:
+      - name: server
+        imagePullPolicy: {{ .Values.mqttWorker.image.pullPolicy | default .Values.global.image.pullPolicy }}
+        image: "{{ template "imageRepository" . }}/tb-mqtt-transport{{ template "licensedSuffix" . }}:{{ .Chart.AppVersion }}"
+        ports:
+        - containerPort: 1883
+          name: mqtt
+        env:
+        - name: TB_SERVICE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: TB_QUEUE_TYPE
+          value: "kafka"
+        - name: MQTT_BIND_ADDRESS
+          value: "0.0.0.0"
+        - name: MQTT_BIND_PORT
+          value: "1883"
+        - name: MQTT_TIMEOUT
+          value: {{ .Values.mqttWorker.timeout | quote }}
+        {{- if .Values.kafka.enabled }}
+        - name: TB_KAFKA_SERVERS
+          value: "{{ template "kafka-nodes" $ }}"
+        {{- end }}
+        volumeMounts:
+          - mountPath: /config
+            name: {{ .Release.Name }}-tb-mqtt-transport-config
+        readinessProbe:
+          periodSeconds: 20
+          tcpSocket:
+            port: 1883
+        livenessProbe:
+          initialDelaySeconds: 120
+          periodSeconds: 20
+          tcpSocket:
+            port: 1883
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-tb-http-transport
+  labels:
+    app: {{ .Release.Name }}-tb-http-transport
+    tier: backend
+    support: {{ template "supportLevel" . }}
+    vendor: ThingsBoard
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.httpWorker.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-tb-http-transport
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-tb-http-transport
+    spec:
+      volumes:
+        - name: {{ .Release.Name }}-tb-http-transport-config
+          configMap:
+            name: {{ .Release.Name }}-tb-http-transport-config
+            items:
+            - key: conf
+              path: tb-http-transport.conf
+            - key: logback
+              path:  logback.xml
+      containers:
+      - name: server
+        imagePullPolicy: {{ .Values.httpWorker.image.pullPolicy | default .Values.global.image.pullPolicy }}
+        image: "{{ template "imageRepository" . }}/tb-http-transport{{ template "licensedSuffix" . }}:{{ .Chart.AppVersion }}"
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: TB_SERVICE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: TB_QUEUE_TYPE
+          value: "kafka"
+        - name: HTTP_BIND_ADDRESS
+          value: "0.0.0.0"
+        - name: HTTP_BIND_PORT
+          value: "8080"
+        - name: HTTP_REQUEST_TIMEOUT
+          value: {{ .Values.httpWorker.timeout | quote }}
+        {{- if .Values.kafka.enabled }}
+        - name: TB_KAFKA_SERVERS
+          value: "{{ template "kafka-nodes" $ }}"
+        {{- end }}
+        volumeMounts:
+          - mountPath: /config
+            name: {{ .Release.Name }}-tb-http-transport-config
+        readinessProbe:
+          periodSeconds: 20
+          tcpSocket:
+            port: 8080
+        livenessProbe:
+          initialDelaySeconds: 120
+          periodSeconds: 20
+          tcpSocket:
+            port: 8080
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-tb-coap-transport
+  labels:
+    app: {{ .Release.Name }}-tb-coap-transport
+    tier: backend
+    support: {{ template "supportLevel" . }}
+    vendor: ThingsBoard
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.coapWorker.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-tb-coap-transport
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-tb-coap-transport
+    spec:
+      volumes:
+        - name: {{ .Release.Name }}-tb-coap-transport-config
+          configMap:
+            name: {{ .Release.Name }}-tb-coap-transport-config
+            items:
+            - key: conf
+              path: tb-coap-transport.conf
+            - key: logback
+              path: logback.xml
+      containers:
+      - name: server
+        imagePullPolicy: {{ .Values.coapWorker.image.pullPolicy | default .Values.global.image.pullPolicy }}
+        image: "{{ template "imageRepository" . }}/tb-coap-transport{{ template "licensedSuffix" . }}:{{ .Chart.AppVersion }}"
+        ports:
+        - containerPort: 5683
+          name: coap
+          protocol: UDP
+        env:
+        - name: TB_SERVICE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: TB_QUEUE_TYPE
+          value: "kafka"
+        - name: COAP_BIND_ADDRESS
+          value: "0.0.0.0"
+        - name: COAP_BIND_PORT
+          value: "5683"
+        - name: COAP_TIMEOUT
+          value: {{ .Values.coapWorker.timeout | quote }}
+        {{- if .Values.kafka.enabled }}
+        - name: TB_KAFKA_SERVERS
+          value: "{{ template "kafka-nodes" $ }}"
+        {{- end }}
+        volumeMounts:
+          - mountPath: /config
+            name: {{ .Release.Name }}-tb-coap-transport-config
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-tb-web-ui
+spec:
+  replicas: {{ .Values.webUi.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-tb-web-ui
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-tb-web-ui
+    spec:
+      containers:
+      - name: server
+        imagePullPolicy: {{ .Values.webUi.pullPolicy }}
+        image: "{{ template "imageRepository" . }}/tb-web-ui{{ template "licensedSuffix" . }}:{{ .Chart.AppVersion }}"
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: HTTP_BIND_ADDRESS
+          value: "0.0.0.0"
+        - name: HTTP_BIND_PORT
+          value: "8080"
+        - name: TB_ENABLE_PROXY
+          value: "false"
+        - name: LOGGER_LEVEL
+          value: {{ .Values.webUi.loggerLevel | quote }}
+        - name: LOG_FOLDER
+          value: "logs"
+        - name: LOGGER_FILENAME
+          value: "tb-web-ui-%DATE%.log"
+        - name: DOCKER_MODE
+          value: "true"
+        livenessProbe:
+          httpGet:
+            path: /index.html
+            port: http
+          initialDelaySeconds: 120
+          timeoutSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-tb-node
+spec:
+  replicas: {{ .Values.node.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-tb-node
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-tb-node
+    spec:
+      volumes:
+        - name: {{ .Release.Name }}-tb-node-config
+          configMap:
+            name: {{ .Release.Name }}-tb-node-config
+            items:
+              - key: conf
+                path: thingsboard.conf
+              - key: logback
+                path: logback.xml
+      containers:
+        - name: server
+          imagePullPolicy: {{ .Values.node.pullPolicy }}
+          image: "{{ template "imageRepository" . }}/tb-node{{ template "licensedSuffix" . }}:{{ .Chart.AppVersion }}"
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9001
+              name: rpc
+          env:
+            - name: TB_SERVICE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: TB_SERVICE_TYPE
+              value: "monolith"
+            - name: TB_QUEUE_TYPE
+              value: "kafka"
+            - name: ZOOKEEPER_ENABLED
+              value: "true"
+            {{- if .Values.kafka.zookeeper.enabled }}
+            - name: ZOOKEEPER_URL
+              value: "{{ template "zookeeper-nodes" . }}"
+              {{- end -}}
+              {{- if .Values.kafka.enabled }}
+            - name: TB_KAFKA_SERVERS
+              value: "{{ template "kafka-nodes" . }}"
+            {{- end }}
+            - name: JS_EVALUATOR
+              value: "remote"
+            - name: TRANSPORT_TYPE
+              value: "remote"
+            - name: HTTP_LOG_CONTROLLER_ERROR_STACK_TRACE
+              value: "false"
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: "org.hibernate.dialect.PostgreSQLDialect"
+            - name: SPRING_DRIVER_CLASS_NAME
+              value: "org.postgresql.Driver"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ template "postgresql-nodes" . }}/{{ index ".Values.postgresql-ha.postgresqlDatabase" }}"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ index ".Values.postgresql-ha.postgresqlUsername" }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: {{ index ".Values.postgresql-ha.postgresqlPassword" }}
+            {{- if eq .Values.deploymentType "Hybrid" }}
+            - name: DATABASE_TS_TYPE
+              value: cassandra
+            - name: CASSANDRA_URL
+              value: "{{ template "cassandra-nodes" . }}"
+            - name: CASSANDRA_SOCKET_READ_TIMEOUT
+              value: "60000"
+            {{- else if eq .Values.deploymentType "sql" }}
+            - name: DATABASE_TS_TYPE
+              value: sql
+            {{- end }}
+            - name: CACHE_TYPE
+              value: redis
+            - name: REDIS_CONNECTION_TYPE
+              value: cluster
+            - name: REDIS_NODES
+              value: "{{ template "redis-nodes" . }}"
+          volumeMounts:
+            - mountPath: /config
+              name: {{ .Release.Name }}-tb-node-config
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 300
+            timeoutSeconds: 10
+      restartPolicy: Always

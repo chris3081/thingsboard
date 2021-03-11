@@ -1,0 +1,179 @@
+
+global:
+  image:
+    #registry: docker.io
+    pullPolicy: Always
+    pullSecrets: []
+
+
+professional:
+  enabled: false
+  licenseKey: "none"
+
+deploymentType: Hybrid
+
+executor:
+  image:
+    pullPolicy: Always
+    pullSecrets: []
+
+  # 20
+  replicaCount: 1
+  loggerLevel: info
+  scriptBodyTraceFrequency: 1000
+  kafkaTopic: "js_eval.requests"
+
+webUi:
+  image:
+    pullPolicy: Always
+    pullSecrets: []
+
+  replicaCount: 1
+  loggerLevel: info
+
+node:
+  image:
+    pullPolicy: Always
+    pullSecrets: []
+  replicaCount: 1
+  loadDemoDataOnInstall: true
+  previousVersionHack: ""
+
+mqttWorker:
+  image:
+    pullPolicy: Always
+    pullSecrets: []
+
+  replicaCount: 1
+  timeout: 10000
+
+httpWorker:
+  image:
+    pullPolicy: Always
+    pullSecrets: []
+
+  replicaCount: 1
+  timeout: 60000
+
+coapWorker:
+  image:
+    pullPolicy: Always
+    pullSecrets: []
+
+  replicaCount: 1
+  timeout: 10000
+
+
+#
+# dependencies
+#
+
+redis:
+  enabled: true
+
+
+cassandra:
+  enabled: true
+  persistence.enabled: true
+  persistence.storageClass: "fast"
+  persistence.size: 15Gi
+
+  dbUser: 
+    user: 
+    password:
+  
+  cluster:
+    name: "Thingsboard Cluster"
+    datacenter: datacenter1
+    rack: "Rack-Thingsboard-Cluster"
+
+
+
+postgresql-ha:
+  enabled: true
+  postgresqlUsername: things
+  postgresqlPassword: "&7B(L.CfL53!Fy_2=a-XkqG3hEPb<~"
+  postgresqlDatabase: thingsboard
+
+kafka:
+  enabled: true
+  image:
+    imagePullPolicy: Always
+  autoCreateTopicsEnable: false
+  allowAnonymousLogin: no
+
+  persistence:
+    enabled: true
+
+  auth:
+    clientProtocol: sasl
+    interBrokerProtocol: sasl
+
+    # Allowed types: plain, scram-sha-256, scram-sha-512
+    saslMechanisms: plain,scram-sha-256,scram-sha-512
+    saslInterBrokerMechanism: plain
+
+    jaas:
+      ## Kafka client user list
+      clientUsers:
+        - tbuser
+
+      ## Kafka client passwords
+      clientPasswords:
+        - "Y2)pf_Yy!#-h*Sn.}L?:q&+fAG#bsz"
+
+      ## Kafka inter broker communication user
+      ##
+      interBrokerUser: admin
+
+      ## Kafka inter broker communication password
+      ##
+      interBrokerPassword: "z:P]9u^v^.2C!m-v$}b4Dbp)p%<[k/"
+
+      ## Kafka Zookeeper user
+      ##
+      zookeeperUser: zookeeperUser
+
+      ## Kafka Zookeeper password
+      ##
+      zookeeperPassword: jF\d6pnf[dsMw+F96%]t%TD]<b2B.
+
+  zookeeper:
+    allowAnonymousLogin: no
+    auth:
+      enabled: true
+      serverUsers: 
+        - zookeeperUser
+      serverPasswords: 
+        - jF\d6pnf[dsMw+F96%]t%TD]<b2B.
+
+  provisioning:
+    enabled: true
+    image:
+      debug: false
+    topics:
+      # https://kafka.apache.org/documentation/#topicconfigs
+    - name: js_eval.requests
+      partitions: 100
+      replicationFactor: 1
+      config:
+        cleanup.policy: delete 
+        retention.ms: "60000" 
+        segment.bytes: "26214400" 
+        retention.bytes: "104857600"
+    - name: tb_transport.api.requests
+      partitions: 30
+      replicationFactor: 1
+      config:
+        cleanup.policy: delete 
+        retention.ms: "60000" 
+        segment.bytes: "26214400" 
+        retention.bytes: "104857600"
+    - name: tb_rule_engine
+      partitions: 30
+      replicationFactor: 1
+      config:
+        cleanup.policy: delete 
+        retention.ms: "60000" 
+        segment.bytes: "26214400" 
+        retention.bytes: "104857600"

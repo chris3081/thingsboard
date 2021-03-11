@@ -1,0 +1,64 @@
+#
+# This file should  be removed after https://github.com/bitnami/charts/pull/4783 closes
+# 
+{{- if .Values.kafka.provisioning.enabled }}
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: {{ .Release.Name }}-kafka-topic-provisioner
+  annotations:
+    app.kubernetes.io/component: kafka
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  template:
+    metadata:
+      annotations:
+        app.kubernetes.io/component: kafka
+    spec:
+      restartPolicy: OnFailure
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: kafka-provisioning
+          image: "{{ .Values.kafka.global.imageRegistry | default .Values.kafka.image.registry }}/{{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - >-
+            {{- range $topic := .Values.kafka.provisioning.topics }}
+              /opt/bitnami/kafka/bin/kafka-topics.sh \
+                --create \
+                --if-not-exists \
+                --bootstrap-server {{ template "kafka-nodes" $ }} \
+                --replication-factor {{ $topic.replicationFactor }} \
+                --partitions {{ $topic.partitions }} \
+                {{- range $name, $value := $topic.config }}
+                --config {{ $name }}={{ $value }} \
+                {{- end }}
+                --topic {{ $topic.name }};
+            {{- end }}
+              echo "Success provisioning"
+          env:
+            - name: BITNAMI_DEBUG
+              value: {{ ternary "true" "false" .Values.kafka.provisioning.image.debug | quote }}
+            - name: bootserver
+              value: "{{ template "kafka-nodes" $ }}"
+          volumeMounts:
+            {{- if or .Values.config .Values.kafka.existingConfigmap }}
+            - name: kafka-config
+              mountPath: /bitnami/kafka/config/server.properties
+              subPath: server.properties
+            {{- end }}
+            {{- if or .Values.log4j .Values.kafka.existingLog4jConfigMap }}
+            - name: log4j-config
+              mountPath: /bitnami/kafka/config/log4j.properties
+              subPath: log4j.properties
+            {{- end }}
+          volumes:
+            {{- if or .Values.config .Values.kafka.existingConfigmap }}
+            - name: kafka-config
+              configMap:
+                name: {{ include ".Values.kafka.configmapName" . }}
+            {{- end }}
+{{- end }}
